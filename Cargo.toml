@@ -1,0 +1,14 @@
+[package]
+name = "uniarity"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+faer = { version = "0.21.2", default-features = false }
+ord_subset = "3.1.1"
+
+[dev-dependencies]
+approx = "0.5.1"
+fastrand = "2.3.0"
+itertools = "0.14.0"
