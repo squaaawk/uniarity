@@ -6,18 +6,23 @@
 //! A minima bracket refers to a pair of abscissa `a` and `b` such that both `f(a)` and `f(b)` are larger than
 //! some minima contained between them.
 
-use crate::compute_epsilon;
+use crate::{compute_epsilon, MaybeEval};
 
 /// Locates the root within a bracket using the bisection method.
 /// Requires that `f` is continuous and that `f(a)` and `f(b)` have opposite signs.
-pub fn bisection<F>(f: &F, mut a: f64, mut b: f64, tol: f64) -> f64
+pub fn bisection<F>(f: &F, a: impl Into<MaybeEval>, b: impl Into<MaybeEval>, tol: f64) -> f64
 where
   F: Fn(f64) -> f64,
 {
-  assert!(a < b);
+  let a = a.into();
+  let b = b.into();
+  assert!(a.x() < b.x());
+
+  let (mut a, fa) = a.evaled(f);
+  let mut b = b.x();
 
   let epsilon = compute_epsilon(a, b, tol);
-  let fa_sign = f(a).signum();
+  let fa_sign = fa.signum();
 
   while b - a > epsilon {
     let x = 0.5 * (a + b);
@@ -40,11 +45,16 @@ where
 /// - `n0 = 5`
 ///
 /// [ITP Method]: https://dl.acm.org/doi/10.1145/3423597
-pub fn itp<F>(f: &F, mut a: f64, mut b: f64, tol: f64) -> f64
+pub fn itp<F>(f: &F, a: impl Into<MaybeEval>, b: impl Into<MaybeEval>, tol: f64) -> f64
 where
   F: Fn(f64) -> f64,
 {
-  assert!(a < b);
+  let a = a.into();
+  let b = b.into();
+  assert!(a.x() < b.x());
+
+  let (mut a, mut fa) = a.evaled(f);
+  let (mut b, mut fb) = b.evaled(f);
 
   let n0 = 5;
   let k1 = 0.2 / (b - a);
@@ -54,9 +64,6 @@ where
   let n1_2 = (((b - a) / epsilon).log2().ceil() - 1.0).max(0.0) as usize;
   let n_max = n0 + n1_2;
   let mut scaled_epsilon = epsilon * 2f64.powi(n_max as i32);
-
-  let mut fa = f(a);
-  let mut fb = f(b);
 
   // The algorithm assumes f(a) <= f(b). If not, we must correct for it
   let negate = fb < fa;
@@ -105,19 +112,17 @@ where
 /// Assumes `f(x)` is positive, `f` decreases in the direction of `step`, and that we're looking for a minimum.
 pub fn find_bracket<F>(
   f: &F,
-  x: f64,
+  x: impl Into<MaybeEval>,
   min_x: f64,
   max_x: f64,
   mut step: f64,
-) -> Option<(f64, f64, f64, f64)>
+) -> Option<(MaybeEval, MaybeEval)>
 where
   F: Fn(f64) -> f64,
 {
   // Exponentially step along the path until we find a bracket
   // step is in the downhill direction
-  let mut a = x;
-  let mut fa = f(a);
-
+  let (mut a, mut fa) = x.into().evaled(f);
   assert!(fa >= 0.0);
 
   let mut b = a;
@@ -135,9 +140,7 @@ where
 
     if fb > fa {
       a -= 0.5 * step;
-      // TODO: Unnecessary evaluation
-      fa = f(a);
-      return Some((a, fa, b, fb));
+      return Some((a.into(), (b, fb).into()));
     }
 
     a = b;
@@ -149,11 +152,15 @@ where
 
 /// Determines a bracket around a root of the given function by first evaluating at `x`
 /// and then searching in the direction of `step` with successively doubling step sizes.
-pub fn find_root_bracket<F>(f: &F, mut x: f64, mut step: f64) -> Option<(f64, f64, f64, f64)>
+pub fn find_root_bracket<F>(
+  f: &F,
+  x: impl Into<MaybeEval>,
+  mut step: f64,
+) -> Option<(MaybeEval, MaybeEval)>
 where
   F: Fn(f64) -> f64,
 {
-  let mut fx = f(x);
+  let (mut x, mut fx) = x.into().evaled(f);
   let sign = fx.signum();
 
   while x.is_finite() {
@@ -161,7 +168,7 @@ where
     let new_fx = f(new_x);
 
     if new_fx.signum() != sign {
-      return Some((x, fx, new_x, new_fx));
+      return Some(((x, fx).into(), (new_x, new_fx).into()));
     }
 
     x = new_x;
@@ -178,21 +185,20 @@ where
 /// Assumes f(x) is positive and it decreases in the direction of step.
 pub fn find_negative_from<F>(
   f: &F,
-  x: f64,
+  x: impl Into<MaybeEval>,
   mut step: f64,
   min_x: f64,
   max_x: f64,
-) -> Option<(f64, f64)>
+) -> Option<MaybeEval>
 where
   F: Fn(f64) -> f64,
 {
   // Exponentially step along the path until we find a bracket
   // step is in the downhill direction
-  let mut a = x;
-  let mut fa = f(a);
+  let (mut a, mut fa) = x.into().evaled(f);
 
   if fa.is_sign_negative() {
-    return Some((a, fa));
+    return Some((a, fa).into());
   }
 
   let mut b = a;
@@ -209,7 +215,7 @@ where
     }
 
     if fb < 0.0 {
-      return Some((b, fb));
+      return Some((b, fb).into());
     }
 
     // We found a bracket; find a negative within it
@@ -226,41 +232,46 @@ where
 
 /// Locates a negative value within the range bracket defined by `a` and `b`.
 // TODO: At the moment, this function uses golden selection search. It would be nice to optionally use brent's algorithm from min
-pub fn locate_negative<F>(f: F, mut a: f64, mut b: f64, tol: f64) -> Option<(f64, f64)>
+pub fn locate_negative<F>(
+  f: F,
+  a: impl Into<MaybeEval>,
+  b: impl Into<MaybeEval>,
+  tol: f64,
+) -> Option<MaybeEval>
 where
   F: Fn(f64) -> f64,
 {
-  assert!(a <= b);
+  let a = a.into();
+  let b = b.into();
+  assert!(a.x() < b.x());
+
+  let (mut a, fa) = a.evaled(&f);
+  if fa < 0.0 {
+    return Some((a, fa).into());
+  }
+
+  let (mut b, fb) = b.evaled(&f);
+  if fb < 0.0 {
+    return Some((b, fb).into());
+  }
 
   let epsilon = compute_epsilon(a, b, tol);
 
   let phi: f64 = 0.5 * (1.0 + 5f64.sqrt());
   let phi_inv: f64 = phi.recip();
 
-  // TODO: This is an extra call when we check outside
-  let fa = f(a);
-  if fa < 0.0 {
-    return Some((a, fa));
-  }
-
-  let fb = f(b);
-  if fb < 0.0 {
-    return Some((b, fb));
-  }
-
   let mut c = b - (b - a) * phi_inv;
   let mut d = a + (b - a) * phi_inv;
 
   while b - a > epsilon {
     let fc = f(c);
-    let fd = f(d);
-
     if fc < 0.0 {
-      return Some((c, fc));
+      return Some((c, fc).into());
     }
 
+    let fd = f(d);
     if fd < 0.0 {
-      return Some((d, fd));
+      return Some((d, fd).into());
     }
 
     if fc < fd {
