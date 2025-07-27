@@ -1,8 +1,8 @@
 use approx::{assert_abs_diff_eq, assert_relative_eq};
 use fastrand::Rng;
 use itertools::{izip, Itertools};
-use ord_subset::OrdSubsetSliceExt;
 
+use ordered_float::OrderedFloat;
 use uniarity::cheb::Cheb;
 
 const N_TESTS: usize = 1_000;
@@ -17,7 +17,7 @@ fn test_small_polynomials() {
     let n_roots = rng.usize(1..=10);
 
     let mut known_roots: Vec<_> = (0..n_roots).map(|_| a + (b - a) * rng.f64()).collect();
-    known_roots.ord_subset_sort();
+    known_roots.sort_by_key(|&v| OrderedFloat(v));
 
     if known_roots.iter().tuple_windows().any(|(a, b)| b - a < 0.1) {
       continue;

@@ -1,6 +1,6 @@
 //! Methods to determine the minimum of a given function within a given range or bracket.
 
-use ord_subset::OrdSubsetIterExt;
+use ordered_float::OrderedFloat;
 
 use crate::compute_epsilon;
 
@@ -15,7 +15,7 @@ where
       let x = a + i as f64 * step;
       (x, f(x))
     })
-    .ord_subset_min_by_key(|&(_, fx)| fx)
+    .min_by_key(|&(_, fx)| OrderedFloat(fx))
     .unwrap()
 }
 
