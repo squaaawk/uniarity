@@ -9,7 +9,7 @@
 //! [CPR Paper]: https://epubs.siam.org/doi/pdf/10.1137/110838297
 //! [chebfun]: https://github.com/chebfun/chebfun
 
-use ord_subset::{OrdSubsetIterExt, OrdSubsetSliceExt};
+use ordered_float::OrderedFloat;
 use std::f64::consts::PI;
 
 use faer::{Col, Mat, Row};
@@ -58,7 +58,11 @@ where
   // println!("{n} {}", c.len());
 
   // Find the last coefficient greater than tol, and truncate everything after it
-  let max_val = c.iter().map(|&x| x.abs()).ord_subset_max().unwrap();
+  let max_val = c
+    .iter()
+    .map(|&x| x.abs())
+    .max_by_key(|&v| OrderedFloat(v))
+    .unwrap();
   let tol = (1e-14 * max_val).max(f64::EPSILON);
 
   // Truncate all coefficients after trunc_i
@@ -162,7 +166,7 @@ impl Cheb {
       .map(|x| self.function_space(x))
       .collect();
 
-    roots.ord_subset_sort_unstable();
+    roots.sort_unstable_by_key(|&v| OrderedFloat(v));
     roots
   }
 
