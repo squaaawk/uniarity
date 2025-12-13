@@ -154,7 +154,7 @@ impl Cheb {
     let i_tol = 1e-8;
     let x_tol = 1e-8;
 
-    let eigvals = A.eigenvalues_from_real().unwrap();
+    let eigvals = A.eigenvalues().unwrap();
 
     let real_eigvals = eigvals
       .into_iter()
