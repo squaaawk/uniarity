@@ -16,6 +16,9 @@ where
 {
   let a = a.into();
   let b = b.into();
+  if a.x() == b.x() {
+    return a.x();
+  }
   assert!(a.x() < b.x());
 
   let (mut a, fa) = a.evaled(f);
@@ -51,6 +54,9 @@ where
 {
   let a = a.into();
   let b = b.into();
+  if a.x() == b.x() {
+    return a.x();
+  }
   assert!(a.x() < b.x());
 
   let (mut a, mut fa) = a.evaled(f);
