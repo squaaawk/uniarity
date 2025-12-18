@@ -3,7 +3,7 @@ use std::f64::consts::TAU;
 
 use uniarity::bracket::{bisection, itp};
 use uniarity::cheb::Cheb;
-use uniarity::initial::{newtons_method, secant};
+use uniarity::initial::{laguerres_method, newtons_method, secant};
 
 struct TestCase {
   function: fn(f64) -> f64,
@@ -93,13 +93,32 @@ fn test_newton() {
 
     // TODO: Compute the derivative directly
     let h = 1e-6;
-    let g = &|x: f64| (f(x + h) - f(x)) / h;
+    let fp = &|x: f64| (f(x + h) - f(x)) / h;
 
     // A very crude initial guess
     let x = (case.a + case.b) / 2.0;
-    let x = newtons_method(f, g, x, f64::EPSILON);
+    let x = newtons_method(f, fp, x, f64::EPSILON);
 
     let epsilon = if case.low_precision { 1e-10 } else { 1e-14 };
+    assert_abs_diff_eq!(f(x), 0.0, epsilon = epsilon);
+  }
+}
+
+#[test]
+fn test_laguerre() {
+  for case in TESTS {
+    let f = &case.function;
+
+    // TODO: Compute the derivative directly
+    let h = 1e-6;
+    let fp = &|x: f64| (f(x + h) - f(x)) / h;
+    let fpp = &|x: f64| (fp(x + h) - fp(x)) / h;
+
+    // A very crude initial guess
+    let x = (case.a + case.b) / 2.0;
+    let x = laguerres_method(f, fp, fpp, 1.0, x, f64::EPSILON);
+
+    let epsilon = if case.low_precision { 1e-10 } else { 1e-13 };
     assert_abs_diff_eq!(f(x), 0.0, epsilon = epsilon);
   }
 }

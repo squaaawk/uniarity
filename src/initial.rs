@@ -1,5 +1,27 @@
 //! Methods to determine the a root of a univariate function using an initial approximation.
 
+/// Uses the secant method to locate the root of a function, given an initial pair of values.
+/// Terminates after |x0 - x1| <= tol, |f(x0) - f(x1)| <= tol, or after 100 iterations.
+pub fn secant<F>(f: &F, mut x0: f64, mut x1: f64, tol: f64) -> f64
+where
+  F: Fn(f64) -> f64,
+{
+  let mut f0 = f(x0);
+  let mut f1 = f(x1);
+
+  let max_iterations = 100;
+  let mut iterations = 0;
+
+  while (x1 - x0).abs() > tol && (f1 - f0).abs() > tol && iterations < max_iterations {
+    let x = x1 - f1 * (x1 - x0) / (f1 - f0);
+    (x0, f0) = (x1, f1);
+    (x1, f1) = (x, f(x));
+    iterations += 1;
+  }
+
+  x1
+}
+
 /// Uses Newton's method to locate the root of a function, given an initial value.
 /// Terminates after |f(x)| <= tol, |g(x)| <= tol, or after 100 iterations.
 pub fn newtons_method<F, Fp>(f: &F, g: &Fp, mut x: f64, tol: f64) -> f64
@@ -23,24 +45,37 @@ where
   x
 }
 
-/// Uses the secant method to locate the root of a function, given an initial pair of values.
-/// Terminates after |x0 - x1| <= tol, |f(x0) - f(x1)| <= tol, or after 100 iterations.
-pub fn secant<F>(f: &F, mut x0: f64, mut x1: f64, tol: f64) -> f64
+/// Uses Laguerre's method to locate the root of a function, given an initial value.
+/// Terminates after |f(x)| <= tol, |g(x)| <= tol, or after 100 iterations.
+pub fn laguerres_method<F, Fp, Fpp>(f: &F, g: &Fp, h: &Fpp, n: f64, mut x: f64, tol: f64) -> f64
 where
   F: Fn(f64) -> f64,
+  Fp: Fn(f64) -> f64,
+  Fpp: Fn(f64) -> f64,
 {
-  let mut f0 = f(x0);
-  let mut f1 = f(x1);
+  let mut fx = f(x);
+  let mut gx = g(x);
+  let mut hx = h(x);
 
   let max_iterations = 100;
   let mut iterations = 0;
 
-  while (x1 - x0).abs() > tol && (f1 - f0).abs() > tol && iterations < max_iterations {
-    let x = x1 - f1 * (x1 - x0) / (f1 - f0);
-    (x0, f0) = (x1, f1);
-    (x1, f1) = (x, f(x));
+  let mut a = tol.next_up();
+
+  #[allow(non_snake_case)]
+  while fx.abs() > tol && a.abs() > tol && iterations < max_iterations {
+    let G = gx / fx;
+    let H = G * G - hx / fx;
+    a = n / (G + ((n - 1.0) * (n * H - G * G)).sqrt().copysign(G));
+    if a.is_nan() || a.is_infinite() {
+      break;
+    }
+    x -= a;
+    fx = f(x);
+    gx = g(x);
+    hx = h(x);
     iterations += 1;
   }
 
-  x1
+  x
 }
