@@ -7,6 +7,14 @@ use uniarity::cheb::Cheb;
 
 const N_TESTS: usize = 1_000;
 
+fn uni(rng: &mut Rng, lo: f64, hi: f64) -> f64 {
+  lo + (hi - lo) * rng.f64()
+}
+
+fn log_uni(rng: &mut Rng, lo: f64, hi: f64) -> f64 {
+  uni(rng, lo.ln(), hi.ln()).exp()
+}
+
 #[test]
 fn test_small_polynomials() {
   let mut rng = Rng::with_seed(1234);
@@ -75,6 +83,28 @@ fn test_constant() {
 
   let cheb = Cheb::new(&|_| -2.0, -10.0, 10.0, 10);
   assert!(cheb.roots().is_empty());
+}
+
+/// An exactly degree 8 case with a tiny top Chebyshev coefficient. The Chebyshev solver will
+/// be inaccurate here, leading to inaccurate results without the final Newton polishing step.
+#[test]
+fn roots_needing_polish() {
+  let mut rng = Rng::with_seed(1234);
+  for case in 0..N_TESTS {
+    let root = uni(&mut rng, -0.9, 0.9);
+    let eps = log_uni(&mut rng, 2e-9, 1e-7);
+    let f = |t: f64| (t - root) + eps * (8.0 * t.acos()).cos(); // = c0 + c1*T1 + eps*T8
+
+    let roots = Cheb::new(&f, -1.0, 1.0, 9).roots();
+    assert_eq!(
+      roots.len(),
+      1,
+      "case {case}: expected one root, got {roots:?}"
+    );
+
+    let residual = f(roots[0]).abs();
+    assert!(residual < 1e-14, "case {case}: residual {residual:e}");
+  }
 }
 
 fn interpolate(points: &[(f64, f64)], x: f64) -> f64 {

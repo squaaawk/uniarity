@@ -106,6 +106,24 @@ impl Cheb {
     Self { a, b, c }
   }
 
+  /// Number of Chebyshev coefficients.
+  #[inline]
+  pub fn num_coefficients(&self) -> usize {
+    self.c.len()
+  }
+
+  /// The Chebyshev polynomial degree.
+  #[inline]
+  pub fn degree(&self) -> usize {
+    self.c.len() - 1
+  }
+
+  /// Returns the k-th coefficient.
+  #[inline]
+  pub fn coefficient(&self, k: usize) -> f64 {
+    self.c.get(k).copied().unwrap_or_default()
+  }
+
   /// Maps an x-value from the range \[a, b\] to \[-1, 1\].
   #[inline]
   fn local_space(&self, x: f64) -> f64 {
@@ -161,13 +179,29 @@ impl Cheb {
       .filter(|z| z.im.abs() <= i_tol)
       .map(|z| z.re);
 
+    let derivative = self.derivative();
     let mut roots: Vec<f64> = real_eigvals
       .filter(|x| x.abs() <= 1.0 + x_tol)
       .map(|x| self.function_space(x))
+      .map(|x| self.polish(x, &derivative))
       .collect();
 
     roots.sort_unstable_by_key(|&v| OrderedFloat(v));
     roots
+  }
+
+  /// A single Newton step, kept only if the root stays in [a, b] and reduces |f|.
+  fn polish(&self, x: f64, derivative: &Cheb) -> f64 {
+    let f = self.evaluate(x);
+    let df = derivative.evaluate(x);
+    if df == 0.0 || f == 0.0 {
+      return x;
+    }
+    let new_x = x - f / df;
+    if new_x < self.a || new_x > self.b || self.evaluate(new_x).abs() >= f.abs() {
+      return x;
+    }
+    new_x
   }
 
   /// Evaluates the Chebyshev approximation at a given x-value.
@@ -182,6 +216,53 @@ impl Cheb {
     }
 
     x * d - dd + self.c[0]
+  }
+
+  /// The derivative as a new Chebyshev polynomial on the same interval.
+  pub fn derivative(&self) -> Cheb {
+    let n = self.c.len();
+    if n == 1 {
+      return Cheb {
+        a: self.a,
+        b: self.b,
+        c: vec![0.0],
+      };
+    }
+
+    let mut d = vec![0.0; n + 1];
+    for k in (1..n).rev() {
+      d[k - 1] = d[k + 1] + 2.0 * k as f64 * self.c[k];
+    }
+    d[0] *= 0.5;
+
+    let scale = 2.0 / (self.b - self.a);
+    Cheb {
+      a: self.a,
+      b: self.b,
+      c: d.into_iter().take(n - 1).map(|x| x * scale).collect(),
+    }
+  }
+
+  /// The antiderivative as a new Chebyshev polynomial on the same interval,
+  /// with the constant chosen so that it is zero at `a`.
+  pub fn integrate(&self) -> Cheb {
+    let n = self.c.len();
+
+    let mut d = vec![0.0; n + 1];
+    d[1] = self.coefficient(0) - 0.5 * self.coefficient(2);
+    for (k, dd) in d.iter_mut().enumerate().take(n + 1).skip(2) {
+      *dd = (self.coefficient(k - 1) - self.coefficient(k + 1)) / (2.0 * k as f64);
+    }
+
+    let scale = 0.5 * (self.b - self.a);
+    d.iter_mut().for_each(|v| *v *= scale);
+    d[0] = d[1..].iter().step_by(2).sum::<f64>() - d[2..].iter().step_by(2).sum::<f64>();
+
+    Cheb {
+      a: self.a,
+      b: self.b,
+      c: d,
+    }
   }
 
   /// Prints out `n` xy-coordinates along the Chebyshev approximation for use in debugging.
