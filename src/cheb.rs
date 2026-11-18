@@ -62,7 +62,7 @@ where
     .iter()
     .map(|&x| x.abs())
     .max_by_key(|&v| OrderedFloat(v))
-    .unwrap();
+    .unwrap_or_default();
   let tol = (1e-14 * max_val).max(f64::EPSILON);
 
   // Truncate all coefficients after trunc_i
@@ -80,6 +80,7 @@ where
 }
 
 /// A Cheybyshev polynomial approximation of a function on a given interval.
+#[derive(Clone)]
 pub struct Cheb {
   a: f64,
   b: f64,
@@ -139,7 +140,21 @@ impl Cheb {
   // TODO: Implement splitting
   /// Returns all real roots of the Chebyshev approximation within the initial interval.
   pub fn roots(&self) -> Vec<f64> {
-    let n = self.c.len();
+    const C_TOL: f64 = 1e-10;
+    const I_TOL: f64 = 1e-8;
+    const X_TOL: f64 = 1e-8;
+
+    let max_val = self
+      .c
+      .iter()
+      .map(|&x| x.abs())
+      .max_by_key(|&v| OrderedFloat(v))
+      .unwrap_or_default();
+
+    let mut n = self.c.len();
+    while n > 1 && self.c[n - 1].abs() <= C_TOL * max_val {
+      n -= 1;
+    }
 
     // Trivial cases
     if n <= 1 {
@@ -169,19 +184,15 @@ impl Cheb {
     }
 
     // Compute eigenvalues, and from them, roots
-    let i_tol = 1e-8;
-    let x_tol = 1e-8;
-
     let eigvals = A.eigenvalues().unwrap();
-
     let real_eigvals = eigvals
       .into_iter()
-      .filter(|z| z.im.abs() <= i_tol)
+      .filter(|z| z.im.abs() <= I_TOL)
       .map(|z| z.re);
 
     let derivative = self.derivative();
     let mut roots: Vec<f64> = real_eigvals
-      .filter(|x| x.abs() <= 1.0 + x_tol)
+      .filter(|x| x.abs() <= 1.0 + X_TOL)
       .map(|x| self.function_space(x))
       .map(|x| self.polish(x, &derivative))
       .collect();
